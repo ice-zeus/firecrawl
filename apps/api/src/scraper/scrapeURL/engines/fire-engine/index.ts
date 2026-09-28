@@ -459,6 +459,16 @@ export async function scrapeURLWithFireEngineChromeCDP(
       FireEngineScrapeRequestChromeCDP = {
       url: meta.rewrittenUrl ?? meta.url,
       scrapeId: meta.id,
+      // PULSE-MOD-BEGIN PULSE-002 2026-09-26 — Pulse: carry private tenant/stage context into shared execution, never public profile.
+      ...(process.env.PULSE_INTEGRATION_MODULE ? {
+        pulseContext: {
+          tenantId: meta.internalOptions.teamId,
+          compatibility: true,
+          operation: "scrape",
+          proxyStage: meta.featureFlags.has("stealthProxy") ? "enhanced" : "basic",
+        },
+      } : {}),
+      // PULSE-MOD-END PULSE-002
       engine: "chrome-cdp",
       ...(wantsRawBase64 ? { format: "rawBase64" as const } : {}),
       instantReturn: false,
@@ -643,6 +653,16 @@ export async function scrapeURLWithFireEngineTLSClient(
       FireEngineScrapeRequestTLSClient = {
       url: meta.rewrittenUrl ?? meta.url,
       scrapeId: meta.id,
+      // PULSE-MOD-BEGIN PULSE-002 2026-09-26 — Pulse: carry private tenant/stage context into shared execution, never public profile.
+      ...(process.env.PULSE_INTEGRATION_MODULE ? {
+        pulseContext: {
+          tenantId: meta.internalOptions.teamId,
+          compatibility: true,
+          operation: "scrape",
+          proxyStage: meta.featureFlags.has("stealthProxy") ? "enhanced" : "basic",
+        },
+      } : {}),
+      // PULSE-MOD-END PULSE-002
       engine: "tlsclient",
       instantReturn: false,
 
