@@ -159,7 +159,11 @@ export async function fireEngineCheckStatus(
     url: `${baseUrl}/scrape/${jobId}`,
     method: "GET",
     logger: logger.child({ method: "fireEngineCheckStatus/robustFetch" }),
-    headers: {},
+    // PULSE-MOD-BEGIN PULSE-003 2026-09-26 — Pulse: authenticate private worker traffic, including polling/cancellation.
+    headers: process.env.PULSE_WORKER_TOKEN
+      ? { "x-pulse-worker-token": process.env.PULSE_WORKER_TOKEN }
+      : {},
+    // PULSE-MOD-END PULSE-003
     mock,
     abort,
   });

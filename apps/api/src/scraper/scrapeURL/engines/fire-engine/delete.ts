@@ -20,7 +20,11 @@ export async function fireEngineDelete(
   await robustFetch({
     url: `${baseUrl}/scrape/${jobId}`,
     method: "DELETE",
-    headers: {},
+    // PULSE-MOD-BEGIN PULSE-003 2026-09-26 — Pulse: authenticate private worker traffic, including polling/cancellation.
+    headers: process.env.PULSE_WORKER_TOKEN
+      ? { "x-pulse-worker-token": process.env.PULSE_WORKER_TOKEN }
+      : {},
+    // PULSE-MOD-END PULSE-003
     logger: logger.child({ method: "fireEngineDelete/robustFetch", jobId }),
     mock,
     abort,

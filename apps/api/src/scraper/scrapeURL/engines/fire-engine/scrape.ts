@@ -230,7 +230,11 @@ export async function fireEngineScrape<
   let status = await robustFetch({
     url: `${baseUrl}/scrape`,
     method: "POST",
-    headers: {},
+    // PULSE-MOD-BEGIN PULSE-003 2026-09-26 — Pulse: authenticate private worker traffic, including polling/cancellation.
+    headers: process.env.PULSE_WORKER_TOKEN
+      ? { "x-pulse-worker-token": process.env.PULSE_WORKER_TOKEN }
+      : {},
+    // PULSE-MOD-END PULSE-003
     body: request,
     logger: logger.child({ method: "fireEngineScrape/robustFetch" }),
     tryCount: 3,
