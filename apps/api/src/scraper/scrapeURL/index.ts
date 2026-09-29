@@ -818,6 +818,10 @@ class WrappedEngineError extends Error {
   }
 }
 
+// PULSE-MOD-BEGIN PULSE-008 2026-09-28 — Pulse: coordinate all target transports through one sequential route owner.
+import { pulseFallbackList, pulseRoutingEnabled, withPulseRoutingContext } from "../../lib/pulse-routing";
+// PULSE-MOD-END PULSE-008
+
 async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
   return withSpan("scrape.engine_loop", async span => {
     meta.logger.info(
@@ -832,7 +836,9 @@ async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
     // TODO: handle sitemap data, see WebScraper/index.ts:280
     // TODO: ScrapeEvents
 
-    const fallbackList = await buildFallbackList(meta);
+    // PULSE-MOD-BEGIN PULSE-008 2026-09-28 — Pulse: one network transport; parsers and cache remain native.
+    const fallbackList = pulseFallbackList(await buildFallbackList(meta));
+    // PULSE-MOD-END PULSE-008
 
     // Check if actions are requested but no engines support them.
     // Skip when the content was already prefetched (a browser engine already
@@ -934,7 +940,9 @@ async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
         try {
           result = await Promise.race([
             ...enginePromises.map(x => x.promise),
-            ...(remainingEngines.length > 0
+            // PULSE-MOD-BEGIN PULSE-008 2026-09-28 — Pulse: no overlapping target attempts during coordinated routing.
+            ...(remainingEngines.length > 0 && !pulseRoutingEnabled()
+            // PULSE-MOD-END PULSE-008
               ? [
                   new Promise<EngineScrapeResultWithContext>((_, reject) => {
                     timeouts.push(
@@ -1234,7 +1242,17 @@ async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
   });
 }
 
+// PULSE-MOD-BEGIN PULSE-008 2026-09-28 — Pulse: propagate tenant/location into nested native robots and file fetches.
 export async function scrapeURL(
+  id: string, url: string, options: ScrapeOptions, internalOptions: InternalOptions, costTracking: CostTracking,
+): Promise<ScrapeUrlResponse> {
+  return withPulseRoutingContext({ id, tenantId: internalOptions.teamId, options,
+    zeroDataRetention: internalOptions.zeroDataRetention, deadline: Date.now() + (options.timeout ?? 300000) },
+    () => scrapeURLWithPulseContext(id, url, options, internalOptions, costTracking));
+}
+
+async function scrapeURLWithPulseContext(
+// PULSE-MOD-END PULSE-008
   id: string,
   url: string,
   options: ScrapeOptions,
