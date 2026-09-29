@@ -10,8 +10,14 @@ import Express from "express";
 import { initializeBlocklist } from "../../scraper/WebScraper/utils/blocklist";
 import { initializeEngineForcing } from "../../scraper/WebScraper/utils/engine-forcing";
 import { shutdownPubSubLogging } from "../logging/log_job";
+// PULSE-MOD-BEGIN PULSE-013 2026-09-28 — Pulse: park discovery waiters in the durable queue before consuming an execution slot.
+import { pulsePrepareJob, pulseRoutingEnabled, pulseSetPreparationError } from "../../lib/pulse-routing";
+// PULSE-MOD-END PULSE-013
 
 export type WorkerQueue = {
+  // PULSE-MOD-BEGIN PULSE-013 2026-09-28 — Pulse: optional backend support is mandatory when adaptive routing is enabled.
+  deferJob?(id: string, lock: string, delaySeconds: number): Promise<boolean>;
+  // PULSE-MOD-END PULSE-013
   getJobToProcess(logger?: any): Promise<NuQJob<any, any> | null>;
   renewLock(id: string, lock: string, logger?: any): Promise<boolean>;
   jobFinish(
@@ -60,6 +66,11 @@ export async function runNuqWorker(options: {
 }) {
   try {
     await initializeBlocklist();
+    // PULSE-MOD-BEGIN PULSE-013 2026-09-28 — Pulse: never silently occupy execution slots on an unsupported queue backend.
+    if (pulseRoutingEnabled() && !options.queue.deferJob) {
+      throw new Error("Pulse adaptive routing requires a queue backend with fenced deferral");
+    }
+    // PULSE-MOD-END PULSE-013
     initializeEngineForcing();
     await options.beforeStart?.();
   } catch (error) {
@@ -147,6 +158,23 @@ export async function runNuqWorker(options: {
     });
 
     logger.info("Acquired job");
+
+    // PULSE-MOD-BEGIN PULSE-013 2026-09-28 — Pulse: short control-plane check; waiting jobs release this worker immediately.
+    if (pulseRoutingEnabled()) {
+      try {
+        if (!(await options.queue.renewLock(job.id, job.lock!, logger))) continue;
+        const route = await pulsePrepareJob(job);
+        if (route.state === "pending") {
+          await options.queue.deferJob!(job.id, job.lock!, Math.max(1, Math.min(60, route.retryAfterSeconds ?? 2)));
+          continue;
+        }
+      } catch (error) {
+        // Native processing records failure, releases tenant concurrency and
+        // completes crawl/webhook bookkeeping without touching the target.
+        pulseSetPreparationError(job, error);
+      }
+    }
+    // PULSE-MOD-END PULSE-013
 
     const lockRenewInterval = setInterval(async () => {
       try {
