@@ -1,5 +1,8 @@
 import { Logger } from "winston";
 import { Meta } from "../..";
+// PULSE-MOD-BEGIN PULSE-002 2026-09-28 — Pulse: nested robots/sitemap requests inherit the authenticated tenant.
+import { pulseRoutingIdentity } from "../../../../lib/pulse-routing";
+// PULSE-MOD-END PULSE-002
 import {
   fireEngineScrape,
   fireEngineURL,
@@ -459,12 +462,13 @@ export async function scrapeURLWithFireEngineChromeCDP(
       FireEngineScrapeRequestChromeCDP = {
       url: meta.rewrittenUrl ?? meta.url,
       scrapeId: meta.id,
-      // PULSE-MOD-BEGIN PULSE-002 2026-09-26 — Pulse: carry private tenant/stage context into shared execution, never public profile.
+      // PULSE-MOD-BEGIN PULSE-002 2026-09-28 — Pulse: carry private tenant/stage context and fail closed if routing is required.
       ...(process.env.PULSE_INTEGRATION_MODULE ? {
         pulseContext: {
-          tenantId: meta.internalOptions.teamId,
+          ...pulseRoutingIdentity(meta.internalOptions.teamId),
           compatibility: true,
           operation: "scrape",
+          routingRequired: process.env.PULSE_ADAPTIVE_ROUTING === "true",
           proxyStage: meta.featureFlags.has("stealthProxy") ? "enhanced" : "basic",
         },
       } : {}),
@@ -653,12 +657,13 @@ export async function scrapeURLWithFireEngineTLSClient(
       FireEngineScrapeRequestTLSClient = {
       url: meta.rewrittenUrl ?? meta.url,
       scrapeId: meta.id,
-      // PULSE-MOD-BEGIN PULSE-002 2026-09-26 — Pulse: carry private tenant/stage context into shared execution, never public profile.
+      // PULSE-MOD-BEGIN PULSE-002 2026-09-28 — Pulse: carry private tenant/stage context and fail closed if routing is required.
       ...(process.env.PULSE_INTEGRATION_MODULE ? {
         pulseContext: {
-          tenantId: meta.internalOptions.teamId,
+          ...pulseRoutingIdentity(meta.internalOptions.teamId),
           compatibility: true,
           operation: "scrape",
+          routingRequired: process.env.PULSE_ADAPTIVE_ROUTING === "true",
           proxyStage: meta.featureFlags.has("stealthProxy") ? "enhanced" : "basic",
         },
       } : {}),
