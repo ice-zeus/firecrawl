@@ -426,6 +426,9 @@ async function processJob(job: NuQJob<ScrapeJobSingleUrls>) {
   let pipeline: ScrapeUrlResponse | null = null;
 
   try {
+    // PULSE-MOD-BEGIN PULSE-012 2026-09-28 — Pulse: fail preparation inside native cleanup before target execution.
+    pulseThrowPreparationError(job);
+    // PULSE-MOD-END PULSE-012
     if (remainingTime !== undefined && remainingTime < 0) {
       throw new ScrapeJobTimeoutError();
     }
@@ -1766,7 +1769,16 @@ async function processKickoffSitemapJob(job: NuQJob<ScrapeJobKickoffSitemap>) {
   }
 }
 
+// PULSE-MOD-BEGIN PULSE-012 2026-09-28 — Pulse: preserve tenant/location context for kickoff and native file fetches.
+import { withPulseRoutingContext, pulseThrowPreparationError } from "../../lib/pulse-routing";
 export const processJobInternal = async (job: NuQJob<ScrapeJobData>) => {
+  const data = job.data as any;
+  return withPulseRoutingContext({ id: job.id, tenantId: data.team_id, options: data.scrapeOptions ?? {},
+    zeroDataRetention: data.zeroDataRetention, deadline: Date.now() + (data.scrapeOptions?.timeout ?? 300000) },
+    () => processJobWithPulseContext(job));
+};
+const processJobWithPulseContext = async (job: NuQJob<ScrapeJobData>) => {
+// PULSE-MOD-END PULSE-012
   const logger = _logger.child({
     module: "queue-worker",
     method: "processJobInternal",
