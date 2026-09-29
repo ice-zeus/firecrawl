@@ -1269,15 +1269,28 @@ class NuQ<JobData = any, JobReturnValue = any> {
 
   // === Prefetch
 
+  // PULSE-MOD-BEGIN PULSE-014 2026-09-28 — Pulse: fenced durable deferral reuses queued locked_at as the earliest pickup time.
+  public async deferJob(id: string, lock: string, delaySeconds: number): Promise<boolean> {
+    const result = await nuqPool.query(
+      `UPDATE ${this.queueName} SET status='queued'::nuq.job_status, lock=NULL,
+       locked_at=now()+($3 * interval '1 second') WHERE id=$1 AND lock=$2 AND status='active'::nuq.job_status`,
+      [id, lock, Math.max(1, Math.min(60, delaySeconds))],
+    );
+    return result.rowCount === 1;
+  }
+  // PULSE-MOD-END PULSE-014
+
   public async prefetchJobs(_logger: Logger = logger): Promise<number> {
     const start = Date.now();
     try {
       const jobs = (
         await nuqPool.query(
+          // PULSE-MOD-BEGIN PULSE-014 2026-09-28 — Pulse: keep deferred jobs out of RabbitMQ prefetch until eligible.
           `
-            WITH next AS (SELECT id FROM ${this.queueName} WHERE ${this.queueName}.status = 'queued'::nuq.job_status ORDER BY ${this.queueName}.priority ASC, ${this.queueName}.created_at ASC FOR UPDATE SKIP LOCKED LIMIT 500)
+            WITH next AS (SELECT id FROM ${this.queueName} WHERE ${this.queueName}.status = 'queued'::nuq.job_status AND (locked_at IS NULL OR locked_at<=now()) ORDER BY ${this.queueName}.priority ASC, ${this.queueName}.created_at ASC FOR UPDATE SKIP LOCKED LIMIT 500)
             UPDATE ${this.queueName} q SET status = 'active'::nuq.job_status, lock = gen_random_uuid(), locked_at = now() FROM next WHERE q.id = next.id RETURNING ${this.jobReturning.map(x => `q.${x}`).join(", ")};
           `,
+          // PULSE-MOD-END PULSE-014
         )
       ).rows.map(row => this.rowToJob(row)!);
 
@@ -1343,10 +1356,12 @@ class NuQ<JobData = any, JobReturnValue = any> {
       return this.rowToJob(
         (
           await nuqPool.query(
+            // PULSE-MOD-BEGIN PULSE-014 2026-09-28 — Pulse: respect route readiness delays on direct PostgreSQL pickup too.
             `
-              WITH next AS (SELECT ${this.jobReturning.join(", ")} FROM ${this.queueName} WHERE ${this.queueName}.status = 'queued'::nuq.job_status ORDER BY ${this.queueName}.priority ASC, ${this.queueName}.created_at ASC FOR UPDATE SKIP LOCKED LIMIT 1)
+              WITH next AS (SELECT ${this.jobReturning.join(", ")} FROM ${this.queueName} WHERE ${this.queueName}.status = 'queued'::nuq.job_status AND (locked_at IS NULL OR locked_at<=now()) ORDER BY ${this.queueName}.priority ASC, ${this.queueName}.created_at ASC FOR UPDATE SKIP LOCKED LIMIT 1)
               UPDATE ${this.queueName} q SET status = 'active'::nuq.job_status, lock = gen_random_uuid(), locked_at = now() FROM next WHERE q.id = next.id RETURNING ${this.jobReturning.map(x => `q.${x}`).join(", ")};
             `,
+            // PULSE-MOD-END PULSE-014
           )
         ).rows[0],
       )!;
