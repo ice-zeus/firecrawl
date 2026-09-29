@@ -1,4 +1,7 @@
 import { Response } from "express";
+// PULSE-MOD-BEGIN PULSE-011 2026-09-28 — Pulse: query authenticated route status for deadline-only retry guidance.
+import { pulseDecorateTimeout } from "../../lib/pulse-routing";
+// PULSE-MOD-END PULSE-011
 import { providerScrapeController } from "./scrape-alexandria";
 import { discoverTools } from "../../search/alexandria";
 import { config } from "../../config";
@@ -455,6 +458,9 @@ export async function scrapeController(
           },
         );
       } catch (e) {
+        // PULSE-MOD-BEGIN PULSE-011 2026-09-28 — Pulse: add retry guidance only after a real timeout and a live discovery check.
+        e = await pulseDecorateTimeout(e, req.auth.team_id, jobId);
+        // PULSE-MOD-END PULSE-011
         if (reservedKeylessCredits > 0 && !reconciledKeylessCredits) {
           reconciledKeylessCredits = true;
           adjustKeylessCredits(req.auth.team_id, -reservedKeylessCredits).catch(
