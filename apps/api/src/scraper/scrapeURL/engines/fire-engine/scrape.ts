@@ -22,6 +22,9 @@ import { Meta } from "../..";
 import type { ResolvedSafeMode } from "../../../../lib/safe-mode";
 
 import { config } from "../../../../config";
+// PULSE-MOD-BEGIN PULSE-003 2026-09-28 — Pulse: preserve private discovery timeout details without triggering engine fallback.
+import { pulseRoutingTimeout } from "../../../../lib/pulse-routing";
+// PULSE-MOD-END PULSE-003
 
 const browserCookieSchema = z
   .object({
@@ -229,7 +232,11 @@ export async function fireEngineScrape<
   let status = await robustFetch({
     url: `${baseUrl}/scrape`,
     method: "POST",
-    headers: {},
+    // PULSE-MOD-BEGIN PULSE-003 2026-09-26 — Pulse: authenticate private worker traffic, including polling/cancellation.
+    headers: process.env.PULSE_WORKER_TOKEN
+      ? { "x-pulse-worker-token": process.env.PULSE_WORKER_TOKEN }
+      : {},
+    // PULSE-MOD-END PULSE-003
     body: request,
     logger: logger.child({ method: "fireEngineScrape/robustFetch" }),
     tryCount: 3,
@@ -248,6 +255,10 @@ export async function fireEngineScrape<
   }
 
   const successParse = successSchema.safeParse(status);
+  // PULSE-MOD-BEGIN PULSE-003 2026-09-28 — Pulse: this payload comes only from the authenticated execution service.
+  const routingTimeout = pulseRoutingTimeout(status);
+  if (routingTimeout) throw routingTimeout;
+  // PULSE-MOD-END PULSE-003
   const processingParse = processingSchema.safeParse(status);
   const failedParse = failedSchema.safeParse(status);
 

@@ -2,6 +2,9 @@ import { Logger } from "winston";
 import { z } from "zod";
 
 import { robustFetch } from "../../lib/fetch";
+// PULSE-MOD-BEGIN PULSE-003 2026-09-28 — Pulse: retain discovery retry guidance through private job polling.
+import { pulseRoutingTimeout } from "../../../../lib/pulse-routing";
+// PULSE-MOD-END PULSE-003
 import {
   ActionError,
   AddFeatureError,
@@ -158,7 +161,11 @@ export async function fireEngineCheckStatus(
     url: `${baseUrl}/scrape/${jobId}`,
     method: "GET",
     logger: logger.child({ method: "fireEngineCheckStatus/robustFetch" }),
-    headers: {},
+    // PULSE-MOD-BEGIN PULSE-003 2026-09-26 — Pulse: authenticate private worker traffic, including polling/cancellation.
+    headers: process.env.PULSE_WORKER_TOKEN
+      ? { "x-pulse-worker-token": process.env.PULSE_WORKER_TOKEN }
+      : {},
+    // PULSE-MOD-END PULSE-003
     mock,
     abort,
   });
@@ -173,6 +180,10 @@ export async function fireEngineCheckStatus(
   }
 
   const successParse = successSchema.safeParse(status);
+  // PULSE-MOD-BEGIN PULSE-003 2026-09-28 — Pulse: authenticated poll results carry native timeout details.
+  const routingTimeout = pulseRoutingTimeout(status);
+  if (routingTimeout) throw routingTimeout;
+  // PULSE-MOD-END PULSE-003
   const processingParse = processingSchema.safeParse(status);
   const failedParse = failedSchema.safeParse(status);
 
