@@ -9,6 +9,9 @@ import {
 } from "../utils/safeFetch";
 import { MockState, saveMock } from "../../lib/mock";
 import { TextDecoder } from "util";
+// PULSE-MOD-BEGIN PULSE-009 2026-09-28 — Pulse: native fetch participates in proxy discovery and admission.
+import { pulseTargetFetch } from "../../../../lib/pulse-routing";
+// PULSE-MOD-END PULSE-009
 
 function decodeHtmlBuffer(
   buf: Buffer,
@@ -153,12 +156,14 @@ export async function scrapeURLWithFetch(
     };
   } else {
     try {
-      const x = await undici.fetch(meta.rewrittenUrl ?? meta.url, {
+      // PULSE-MOD-BEGIN PULSE-009 2026-09-28 — Pulse: preserve native fetch semantics through the coordinated worker.
+      const x = await pulseTargetFetch(meta.rewrittenUrl ?? meta.url, {
         dispatcher: getSecureDispatcher(meta.options.skipTlsVerification),
         redirect: "follow",
         headers: meta.options.headers,
         signal: meta.abort.asSignal(),
-      });
+      }, undici, meta.options.skipTlsVerification);
+      // PULSE-MOD-END PULSE-009
 
       const buf = Buffer.from(await x.arrayBuffer());
       const contentType = x.headers.get("content-type") ?? undefined;
