@@ -15,6 +15,9 @@ import { v7 as uuid } from "uuid";
 import * as undici from "undici";
 import { getSecureDispatcher } from "./safeFetch";
 import { logger } from "../../../../lib/logger";
+// PULSE-MOD-BEGIN PULSE-010 2026-09-28 — Pulse: include binary and sitemap downloads in host admission.
+import { pulseTargetFetch } from "../../../../lib/pulse-routing";
+// PULSE-MOD-END PULSE-010
 
 /**
  * Matches undici ProxyAgent tunnel failures: the proxy's CONNECT response was
@@ -175,11 +178,13 @@ export async function fetchFileToBuffer(
   buffer: Buffer;
 }> {
   try {
-    const response = await undici.fetch(url, {
+    // PULSE-MOD-BEGIN PULSE-010 2026-09-28 — Pulse: route file buffering through the shared proxy coordinator.
+    const response = await pulseTargetFetch(url, {
       ...init,
       redirect: "follow",
       dispatcher: getSecureDispatcher(skipTlsVerification),
-    });
+    }, undici, skipTlsVerification);
+    // PULSE-MOD-END PULSE-010
     if (maxSize !== undefined) {
       checkContentLength(response, maxSize);
     }
@@ -228,11 +233,13 @@ export async function downloadFile(
 
   // TODO: maybe we could use tlsclient for this? for proxying
   try {
-    const response = await undici.fetch(url, {
+    // PULSE-MOD-BEGIN PULSE-010 2026-09-28 — Pulse: route file streaming through the shared proxy coordinator.
+    const response = await pulseTargetFetch(url, {
       ...init,
       redirect: "follow",
       dispatcher: getSecureDispatcher(skipTlsVerification),
-    });
+    }, undici, skipTlsVerification);
+    // PULSE-MOD-END PULSE-010
 
     if (maxSize !== undefined) {
       checkContentLength(response, maxSize);
