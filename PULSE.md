@@ -32,5 +32,6 @@ re-record the register in the Pulse repository and rerun its checks before movin
 | PULSE-014 | `apps/api/src/services/worker/nuq.ts` | Fence PostgreSQL job deferral and delay both direct and RabbitMQ prefetch pickup |
 | PULSE-015 | `apps/api/src/__tests__/lib/pulse-routing.test.ts` | Test native timeout serialization without triggering PDF auto-resume |
 | PULSE-016 | `apps/api/src/controllers/v2/types.ts` | Accept optional Pulse routing hints in scrape options for the single shared stack |
+| PULSE-018 | `apps/api/src/scraper/scrapeURL/lib/request-context.ts` | Requests with `pulse` routing hints neither read from nor write to the shared index cache. |
 | PULSE-017 | `PULSE.md` | This index. |
 <!-- PULSE-MOD-END PULSE-017 -->
