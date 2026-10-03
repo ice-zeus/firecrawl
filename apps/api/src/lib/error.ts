@@ -187,20 +187,31 @@ export function composeTimeoutProcessing(args: {
 
 /** Safe accessor for the processing details on a (possibly deserialized)
  * SCRAPE_TIMEOUT error. */
+// PULSE-MOD-BEGIN PULSE-007 2026-09-28 — Pulse: preserve native timeout code with distinct discovery/recovery states.
+type PulseRoutingTimeoutDetails = {
+  state: "domain_discovery_in_progress" | "domain_recovery_in_progress";
+  reason: "DOMAIN_DISCOVERY_IN_PROGRESS" | "DOMAIN_RECOVERY_IN_PROGRESS";
+  retryAfterSeconds: number;
+};
+type ScrapeTimeoutDetails = ScrapeTimeoutProcessingDetails | PulseRoutingTimeoutDetails;
+
 export function getTimeoutProcessingDetails(
   e: unknown,
-): ScrapeTimeoutProcessingDetails | undefined {
+): ScrapeTimeoutDetails | undefined {
   if (e instanceof TransportableError && e.code === "SCRAPE_TIMEOUT") {
     const p = (e as ScrapeJobTimeoutError).processing;
-    if (p && p.state === "processing_continues") return p;
+    if (p && ["processing_continues", "domain_discovery_in_progress", "domain_recovery_in_progress"].includes(p.state)) return p;
   }
   return undefined;
 }
+// PULSE-MOD-END PULSE-007
 
 export class ScrapeJobTimeoutError extends TransportableError {
   constructor(
     message: string = "The scrape operation timed out before completing. This happens when a page takes too long to load, render, or process. Possible causes: (1) The website is slow or unresponsive, (2) The page has heavy JavaScript that takes time to execute, (3) The page is very large or has many resources to load, (4) Network latency is high. To fix this, try increasing the timeout parameter in your scrape request, or if using actions, ensure your selectors are correct and the page is ready before actions are executed.",
-    public processing?: ScrapeTimeoutProcessingDetails,
+    // PULSE-MOD-BEGIN PULSE-007 2026-09-28 — Pulse: serialize routing hints through native worker timeout transport.
+    public processing?: ScrapeTimeoutDetails,
+    // PULSE-MOD-END PULSE-007
   ) {
     super("SCRAPE_TIMEOUT", message);
   }
