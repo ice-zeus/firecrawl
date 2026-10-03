@@ -84,6 +84,15 @@ const captureRawBody = (
 
 registerMcpActionLogIngestRoute(app);
 
+// PULSE-MOD-BEGIN PULSE-004 2026-09-26 — Pulse: verify assertion freshness before slow uploads without moving public auth/validation rejection.
+if (process.env.PULSE_INTEGRATION_MODULE) {
+  const pulseIdentity = require(process.env.PULSE_INTEGRATION_MODULE);
+  app.use((req, _res, next) => {
+    pulseIdentity.capture(req);
+    next();
+  });
+}
+// PULSE-MOD-END PULSE-004
 app.use(bodyParser.urlencoded({ extended: true, verify: captureRawBody }));
 app.use(bodyParser.json({ limit: "10mb", verify: captureRawBody }));
 
