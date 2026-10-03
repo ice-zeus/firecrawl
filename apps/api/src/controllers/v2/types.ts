@@ -850,6 +850,16 @@ const scrapeOptionFields = z.strictObject({
   // protection policy. Gated on the team flag + org config (checkPermissions).
   threatProtection: threatProtectionOverrideSchema.optional(),
   auditMetadata: auditMetadataSchema.optional(),
+  // PULSE-MOD-BEGIN PULSE-016 2026-10-03 — Pulse: optional per-request routing hints; one shared stack serves every engine.
+  pulse: z
+    .strictObject({
+      engine: z.enum(["auto", "http", "chromium", "camoufox", "obscura"]).optional(),
+      browser: z.enum(["chrome", "firefox", "safari", "edge"]).optional(),
+      os: z.enum(["windows", "macos", "linux", "android", "ios"]).optional(),
+      device: z.enum(["desktop", "mobile", "tablet"]).optional(),
+    })
+    .optional(),
+  // PULSE-MOD-END PULSE-016
 
   profile: z
     .object({
