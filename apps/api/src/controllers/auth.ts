@@ -51,6 +51,14 @@ import type { OAuthIntrospectionResponse } from "../services/oauth-token-introsp
 import { verifyMcpDelegatedCredential } from "../lib/mcp-delegated-credential";
 import { autumnService } from "../services/autumn/autumn.service";
 import { ReplyError } from "ioredis";
+// PULSE-MOD-BEGIN PULSE-001 2026-09-26 — Pulse: verify private tenant decisions at upstream auth precedence.
+import { isEndpointAllowed } from "../lib/key-restriction";
+import { redisRateLimitClient } from "../services/rate-limiter";
+const pulseIdentity = process.env.PULSE_INTEGRATION_MODULE
+  ? require(process.env.PULSE_INTEGRATION_MODULE)
+  : null;
+// PULSE-MOD-END PULSE-001
+
 
 function normalizedApiIsUuid(potentialUuid: string): boolean {
   // Check if the string is a valid UUID
@@ -171,6 +179,12 @@ async function getACUC(
     acuc.is_extract = isExtract;
     return acuc;
   }
+
+  // PULSE-MOD-BEGIN PULSE-001 2026-09-26 — Pulse: native OAuth/MCP delegation must never fall through to shared bypass credentials.
+  if (pulseIdentity && config.USE_DB_AUTHENTICATION !== true) {
+    return null;
+  }
+  // PULSE-MOD-END PULSE-001
 
   if (config.USE_DB_AUTHENTICATION !== true) {
     const acuc = mockACUC();
@@ -330,6 +344,12 @@ export async function getACUCTeam(
     const acuc = mockPreviewACUC(team_id, isExtract);
     return acuc;
   }
+
+  // PULSE-MOD-BEGIN PULSE-001 2026-09-26 — Pulse: preserve queued tenant identity without the shared bypass account.
+  if (pulseIdentity && config.USE_DB_AUTHENTICATION !== true) {
+    return pulseIdentity.teamChunk(team_id, isExtract);
+  }
+  // PULSE-MOD-END PULSE-001
 
   if (config.USE_DB_AUTHENTICATION !== true) {
     const acuc = mockACUC();
@@ -688,6 +708,23 @@ export async function authenticateUser(
   mode: RateLimiterMode,
   options?: AuthenticateOptions,
 ): Promise<AuthResponse> {
+  // PULSE-MOD-BEGIN PULSE-001 2026-09-26 — Pulse: leave response rendering, keyless routes and validation ordering upstream.
+  if (pulseIdentity) {
+    return pulseIdentity.authenticate(req, {
+      extract: mode === RateLimiterMode.Extract || mode === RateLimiterMode.ExtractStatus || mode === RateLimiterMode.ExtractAgentPreview,
+      keyless: () => handleKeylessAuth(req, mode, options?.allowKeyless),
+      native: () => supaAuthenticateUser(req, res, mode, options),
+      endpoint: isEndpointAllowed,
+      consume: (tenant: string, limit: { requests: number; window_seconds: number }) =>
+        new RateLimiterRedis({
+          storeClient: redisRateLimitClient,
+          keyPrefix: `pulse:operational:limit:${limit.window_seconds}:${limit.requests}`,
+          points: limit.requests,
+          duration: limit.window_seconds,
+        }).consume(tenant),
+    });
+  }
+  // PULSE-MOD-END PULSE-001
   const bypassChunk = mockACUC();
   bypassChunk.is_extract =
     mode === RateLimiterMode.Extract ||
