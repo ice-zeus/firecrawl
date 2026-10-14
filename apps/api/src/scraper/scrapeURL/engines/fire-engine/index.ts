@@ -1,6 +1,6 @@
 import { Logger } from "winston";
 import { Meta } from "../..";
-// PULSE-MOD-BEGIN PULSE-002 2026-10-03 — Pulse: nested robots/sitemap requests inherit the authenticated tenant.
+// PULSE-MOD-BEGIN PULSE-002 2026-10-14 — Pulse: nested robots/sitemap requests inherit the authenticated tenant.
 import { pulseRoutingIdentity } from "../../../../lib/pulse-routing";
 // PULSE-MOD-END PULSE-002
 import {
@@ -215,6 +215,12 @@ async function performFireEngineScrape<
     } else {
       status = scrape as FireEngineCheckStatusSuccess;
     }
+
+    // PULSE-MOD-BEGIN PULSE-002 2026-10-14 — Pulse: a worker result whose anti-bot inspection says never_cache (challenge, rate limit) uses the index cache's own storeInCache opt-out.
+    if ((status.meta?.pulseInspection as any)?.never_cache === true) {
+      meta.options.storeInCache = false;
+    }
+    // PULSE-MOD-END PULSE-002
 
     const wantsRawBase64 =
       hasFormatOfType(meta.options.formats, "rawBase64") !== undefined;
