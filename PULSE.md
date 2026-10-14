@@ -1,4 +1,4 @@
-<!-- PULSE-MOD-BEGIN PULSE-017 2026-10-03 — Pulse: single index of every Pulse change in this fork -->
+<!-- PULSE-MOD-BEGIN PULSE-017 2026-10-14 — Pulse: single index of every Pulse change in this fork -->
 # Pulse changes in this fork
 
 `main` is the official [firecrawl/firecrawl](https://github.com/firecrawl/firecrawl) `main` plus a small set of
@@ -17,7 +17,7 @@ re-record the register in the Pulse repository and rerun its checks before movin
 | ID | Files | Why |
 |----|-------|-----|
 | PULSE-001 | `apps/api/src/controllers/auth.ts` | Verify signed Pulse tenant identity at native auth precedence, delegate native credentials without bypass, preserve queued ownership |
-| PULSE-002 | `apps/api/src/scraper/scrapeURL/engines/fire-engine/index.ts` | Carry tenant and parent identity, proxy stage, required enforcement to private workers, and forward optional per-request routing hints as pulseRouting |
+| PULSE-002 | `apps/api/src/scraper/scrapeURL/engines/fire-engine/index.ts` `apps/api/src/scraper/scrapeURL/engines/fire-engine/__tests__/pulseNeverCache.test.ts` | Carry tenant and parent identity, proxy stage, required enforcement to private workers, and forward optional per-request routing hints as pulseRouting; a worker result whose `meta.pulseInspection.never_cache` is true turns off the index-cache write (`storeInCache`) |
 | PULSE-003 | `apps/api/src/scraper/scrapeURL/engines/fire-engine/scrape.ts` `apps/api/src/scraper/scrapeURL/engines/fire-engine/checkStatus.ts` `apps/api/src/scraper/scrapeURL/engines/fire-engine/delete.ts` | Authenticate private worker traffic and propagate routing timeout metadata |
 | PULSE-004 | `apps/api/src/index.ts` | Capture verified identity before streaming uploads but preserve upstream validation/auth rejection precedence |
 | PULSE-005 | `apps/api/src/__tests__/snips/v2/pulse-compatibility.test.ts` | Gated API happy/failure win conditions for the Pulse proxy; skips must never count as release evidence |
