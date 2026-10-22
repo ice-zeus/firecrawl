@@ -1,4 +1,4 @@
-<!-- PULSE-MOD-BEGIN PULSE-017 2026-10-14 — Pulse: single index of every Pulse change in this fork -->
+<!-- PULSE-MOD-BEGIN PULSE-017 2026-10-22 — Pulse: single index of every Pulse change in this fork -->
 # Pulse changes in this fork
 
 `main` is the official [firecrawl/firecrawl](https://github.com/firecrawl/firecrawl) `main` plus a small set of
@@ -17,15 +17,15 @@ re-record the register in the Pulse repository and rerun its checks before movin
 | ID | Files | Why |
 |----|-------|-----|
 | PULSE-001 | `apps/api/src/controllers/auth.ts` | Verify signed Pulse tenant identity at native auth precedence, delegate native credentials without bypass, preserve queued ownership |
-| PULSE-002 | `apps/api/src/scraper/scrapeURL/engines/fire-engine/index.ts` `apps/api/src/scraper/scrapeURL/engines/fire-engine/__tests__/pulseNeverCache.test.ts` | Carry tenant and parent identity, proxy stage, required enforcement to private workers, and forward optional per-request routing hints as pulseRouting; a worker result whose `meta.pulseInspection.never_cache` is true turns off the index-cache write (`storeInCache`) |
+| PULSE-002 | `apps/api/src/scraper/scrapeURL/engines/fire-engine/index.ts` `apps/api/src/scraper/scrapeURL/engines/fire-engine/__tests__/pulseNeverCache.test.ts` | Carry tenant and parent identity, proxy stage, required enforcement to private workers, and forward optional per-request routing hints as pulseRouting; a worker result whose `meta.pulseInspection.never_cache` is true turns off the index-cache write (`storeInCache`), and the attempt's inspection is handed to the cache write and the document |
 | PULSE-003 | `apps/api/src/scraper/scrapeURL/engines/fire-engine/scrape.ts` `apps/api/src/scraper/scrapeURL/engines/fire-engine/checkStatus.ts` `apps/api/src/scraper/scrapeURL/engines/fire-engine/delete.ts` | Authenticate private worker traffic and propagate routing timeout metadata |
 | PULSE-004 | `apps/api/src/index.ts` | Capture verified identity before streaming uploads but preserve upstream validation/auth rejection precedence |
 | PULSE-005 | `apps/api/src/__tests__/snips/v2/pulse-compatibility.test.ts` | Gated API happy/failure win conditions for the Pulse proxy; skips must never count as release evidence |
-| PULSE-006 | `apps/api/src/lib/pulse-routing.ts` | Bridge to independent Pulse routing without changing public request schemas |
+| PULSE-006 | `apps/api/src/lib/pulse-routing.ts` `apps/api/src/__tests__/lib/pulseStage4Cache.test.ts` | Bridge to independent Pulse routing without changing public request schemas; also carries this scrape's never-cache verdict, the index-cache guard and the one customer-visible worker warning |
 | PULSE-007 | `apps/api/src/lib/error.ts` | Serialize discovery and recovery hints in the native timeout envelope |
-| PULSE-008 | `apps/api/src/scraper/scrapeURL/index.ts` | Disable overlapping target attempts and preserve nested routing context |
-| PULSE-009 | `apps/api/src/scraper/scrapeURL/engines/fetch/index.ts` | Coordinate native HTML fetches through approved proxy routes |
-| PULSE-010 | `apps/api/src/scraper/scrapeURL/engines/utils/downloadFile.ts` | Coordinate native binary and sitemap downloads through approved proxy routes |
+| PULSE-008 | `apps/api/src/scraper/scrapeURL/index.ts` | Disable overlapping target attempts, preserve nested routing context, and apply this scrape's never-cache verdict and known warning codes before the transformers run |
+| PULSE-009 | `apps/api/src/scraper/scrapeURL/engines/fetch/index.ts` `apps/api/src/scraper/scrapeURL/engines/fetch/__tests__/pulseNeverCache.test.ts` | Coordinate native HTML fetches through approved proxy routes and honour their never-cache verdict |
+| PULSE-010 | `apps/api/src/scraper/scrapeURL/engines/utils/downloadFile.ts` `apps/api/src/scraper/scrapeURL/engines/utils/pulseNeverCache.test.ts` | Coordinate native binary and sitemap downloads through approved proxy routes and raise their never-cache verdict |
 | PULSE-011 | `apps/api/src/controllers/v2/scrape.ts` | Return discovery retry guidance only after timeout and a live coordinator check |
 | PULSE-012 | `apps/api/src/services/worker/scrape-worker.ts` | Carry tenant and location into native worker downloads |
 | PULSE-013 | `apps/api/src/services/worker/nuq-worker-runner.ts` | Defer eligible discovery waiters before worker execution and reject unsupported backends |
@@ -33,5 +33,6 @@ re-record the register in the Pulse repository and rerun its checks before movin
 | PULSE-015 | `apps/api/src/__tests__/lib/pulse-routing.test.ts` | Test native timeout serialization without triggering PDF auto-resume |
 | PULSE-016 | `apps/api/src/controllers/v2/types.ts` | Accept optional Pulse routing hints in scrape options for the single shared stack |
 | PULSE-018 | `apps/api/src/scraper/scrapeURL/lib/request-context.ts` | Requests with `pulse` routing hints neither read from nor write to the shared index cache. |
+| PULSE-019 | `apps/api/src/scraper/scrapeURL/engines/index/index.ts` `apps/api/src/scraper/scrapeURL/engines/index/__tests__/pulseCacheGuard.test.ts` | A result the private worker never inspected is evaluated before the shared index cache keeps it; a deny, a timeout or an error keeps it out. No cost while `INDEX_DATABASE_URL` is unset. |
 | PULSE-017 | `PULSE.md` | This index. |
 <!-- PULSE-MOD-END PULSE-017 -->
