@@ -814,8 +814,9 @@ class WrappedEngineError extends Error {
   }
 }
 
-// PULSE-MOD-BEGIN PULSE-008 2026-09-28 — Pulse: coordinate all target transports through one sequential route owner.
-import { pulseFallbackList, pulseRoutingEnabled, withPulseRoutingContext } from "../../lib/pulse-routing";
+// PULSE-MOD-BEGIN PULSE-008 2026-10-22 — Pulse: coordinate all target transports through one sequential route owner.
+import { pulseAppendWarnings, pulseFallbackList, pulseRoutingEnabled,
+  pulseScrapeSignals, pulseWithScrapeSignals, withPulseRoutingContext } from "../../lib/pulse-routing";
 // PULSE-MOD-END PULSE-008
 
 async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
@@ -1218,6 +1219,25 @@ async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
           : warning;
     }
 
+    // PULSE-MOD-BEGIN PULSE-008 2026-10-22 — Pulse: apply this scrape's anti-bot verdicts before the transformers write the index cache.
+    const pulseSignals = pulseScrapeSignals();
+    // A native fetch or download the worker marked never_cache (an active
+    // challenge, a denial or a rate-limit page) keeps the whole result out of
+    // the index cache, through Firecrawl's own storeInCache opt-out.
+    if (pulseSignals.neverCache) {
+      meta.options.storeInCache = false;
+    }
+    // Only the winning worker result's own warning codes are shown, and only the
+    // codes Firecrawl knows: one fixed sentence each, next to Firecrawl's own
+    // warnings. Free worker text never reaches a customer document.
+    if (String(result.engine).startsWith("fire-engine")) {
+      document.warning = pulseAppendWarnings(
+        document.warning,
+        pulseSignals.warnings,
+      );
+    }
+    // PULSE-MOD-END PULSE-008
+
     document = await executeTransformers(meta, document);
 
     // Set final span attributes
@@ -1239,13 +1259,14 @@ async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
   });
 }
 
-// PULSE-MOD-BEGIN PULSE-008 2026-09-28 — Pulse: propagate tenant/location into nested native robots and file fetches.
+// PULSE-MOD-BEGIN PULSE-008 2026-10-22 — Pulse: propagate tenant/location into nested native robots and file fetches, and open this scrape's anti-bot signal box.
 export async function scrapeURL(
   id: string, url: string, options: ScrapeOptions, internalOptions: InternalOptions, costTracking: CostTracking,
 ): Promise<ScrapeUrlResponse> {
-  return withPulseRoutingContext({ id, tenantId: internalOptions.teamId, options,
-    zeroDataRetention: internalOptions.zeroDataRetention, deadline: Date.now() + (options.timeout ?? 300000) },
-    () => scrapeURLWithPulseContext(id, url, options, internalOptions, costTracking));
+  return pulseWithScrapeSignals(() =>
+    withPulseRoutingContext({ id, tenantId: internalOptions.teamId, options,
+      zeroDataRetention: internalOptions.zeroDataRetention, deadline: Date.now() + (options.timeout ?? 300000) },
+      () => scrapeURLWithPulseContext(id, url, options, internalOptions, costTracking)));
 }
 
 async function scrapeURLWithPulseContext(

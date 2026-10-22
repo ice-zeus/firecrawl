@@ -1,4 +1,4 @@
-// PULSE-MOD-BEGIN PULSE-002 2026-10-14 — Pulse: a worker result whose anti-bot inspection says never_cache must not be index-cached.
+// PULSE-MOD-BEGIN PULSE-002 2026-10-22 — Pulse: a worker result whose anti-bot inspection says never_cache must not be index-cached, and its inspection reaches this scrape's cache write and document.
 import { describe, expect, it, vi } from "vitest";
 
 const fetchFake = vi.hoisted(() => ({
@@ -9,6 +9,10 @@ vi.mock("../../../lib/fetch", () => ({
   robustFetch: vi.fn(async () => fetchFake.status),
 }));
 
+import {
+  pulseScrapeSignals,
+  pulseWithScrapeSignals,
+} from "../../../../../lib/pulse-routing";
 import {
   scrapeURLWithFireEngineChromeCDP,
   scrapeURLWithFireEngineTLSClient,
@@ -61,6 +65,31 @@ describe.each([
     const meta = fakeMeta();
     await scrape(meta);
     expect(meta.options.storeInCache).toBe(storeInCache);
+  });
+});
+
+describe("Pulse worker inspection on the way to the cache write and the document", () => {
+  const page = {
+    timeTaken: 1, content: "<html></html>", pageStatusCode: 200,
+    responseHeaders: { "content-type": "text/html" },
+  };
+
+  it("hands the finished attempt's inspection on and lets the next attempt replace it", async () => {
+    const warnings = [
+      { code: "ACTION_SUBMISSION_MAY_BE_LOST", actionIndex: 2, checkpointIndex: 1 },
+    ];
+    await pulseWithScrapeSignals(async () => {
+      fetchFake.status = {
+        ...page,
+        meta: { pulseInspection: { schema_version: 1, never_cache: false, warnings } },
+      };
+      await scrapeURLWithFireEngineTLSClient(fakeMeta());
+      expect(pulseScrapeSignals()).toEqual({ neverCache: false, inspected: true, warnings });
+
+      fetchFake.status = { ...page };
+      await scrapeURLWithFireEngineTLSClient(fakeMeta());
+      expect(pulseScrapeSignals()).toEqual({ neverCache: false, inspected: false, warnings: [] });
+    });
   });
 });
 // PULSE-MOD-END PULSE-002

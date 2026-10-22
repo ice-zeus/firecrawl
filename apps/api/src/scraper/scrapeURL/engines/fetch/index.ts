@@ -9,8 +9,8 @@ import {
 } from "../utils/safeFetch";
 import { MockState, saveMock } from "../../lib/mock";
 import { TextDecoder } from "util";
-// PULSE-MOD-BEGIN PULSE-009 2026-09-28 — Pulse: native fetch participates in proxy discovery and admission.
-import { pulseTargetFetch } from "../../../../lib/pulse-routing";
+// PULSE-MOD-BEGIN PULSE-009 2026-10-22 — Pulse: native fetch participates in proxy discovery and admission.
+import { pulseNeverCache, pulseTargetFetch } from "../../../../lib/pulse-routing";
 // PULSE-MOD-END PULSE-009
 
 function decodeHtmlBuffer(
@@ -156,13 +156,20 @@ export async function scrapeURLWithFetch(
     };
   } else {
     try {
-      // PULSE-MOD-BEGIN PULSE-009 2026-09-28 — Pulse: preserve native fetch semantics through the coordinated worker.
+      // PULSE-MOD-BEGIN PULSE-009 2026-10-22 — Pulse: preserve native fetch semantics through the coordinated worker, and honour its never-cache verdict.
       const x = await pulseTargetFetch(meta.rewrittenUrl ?? meta.url, {
         dispatcher: getSecureDispatcher(meta.options.skipTlsVerification),
         redirect: "follow",
         headers: meta.options.headers,
         signal: meta.abort.asSignal(),
       }, undici, meta.options.skipTlsVerification);
+
+      // A fetch the worker marked never_cache (an active challenge, a denial or
+      // a rate-limit page) uses the index cache's own storeInCache opt-out, the
+      // same one the worker engine uses.
+      if (pulseNeverCache(x)) {
+        meta.options.storeInCache = false;
+      }
       // PULSE-MOD-END PULSE-009
 
       const buf = Buffer.from(await x.arrayBuffer());
