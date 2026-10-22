@@ -42,7 +42,8 @@ describe("Pulse never_cache on native downloads", () => {
     routing.responses.push(response);
     const result = await fetchFileToBuffer("https://example.com/file.pdf");
     expect(result.buffer.toString()).toBe("%PDF-1.7");
-    expect(routing.noted).toEqual([response]);
+    expect(routing.noted).toHaveLength(1);
+    expect(routing.noted[0]).toBe(response);
   });
 
   it("raises the verdict of a streamed download", async () => {
@@ -50,7 +51,8 @@ describe("Pulse never_cache on native downloads", () => {
     routing.responses.push(response);
     const result = await downloadFile("scrape-id", "https://example.com/file.pdf");
     expect(result.tempFilePath).toContain("tempFile-scrape-id--");
-    expect(routing.noted).toEqual([response]);
+    expect(routing.noted).toHaveLength(1);
+    expect(routing.noted[0]).toBe(response);
     await fs.unlink(result.tempFilePath);
   });
 });
