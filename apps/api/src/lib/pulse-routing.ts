@@ -148,7 +148,8 @@ export function pulseApplyScrapeSignals(
 type PulseCacheInput = { url: string; status: number; html: string; contentType?: string };
 type PulseCacheGuard = { shouldCache(input: PulseCacheInput): Promise<boolean>; close(): Promise<void> };
 const denyCacheGuard: PulseCacheGuard = { shouldCache: async () => false, close: async () => {} };
-let cacheGuard: PulseCacheGuard | null | undefined;
+let cacheGuard: PulseCacheGuard | null = null;
+let cacheGuardLoaded = false;
 const warned = new Set<string>();
 /** Refusing to cache is the safe answer, but it must never be a silent one: an
  * operator whose module is misconfigured would otherwise see the index quietly
@@ -172,23 +173,28 @@ function cacheGuardOptions(): { workers?: number; budgetMs?: number } {
     budgetMs: positive(process.env.PULSE_ANTIBOT_CACHE_BUDGET_MS),
   };
 }
+/** Loads the configured evaluator. Null means no module is configured, which is
+ * the deployment default and leaves the native decision alone; a module that
+ * cannot be created denies caching rather than letting unchecked pages into the
+ * shared index. */
+function loadCacheGuard(): PulseCacheGuard | null {
+  const path = process.env.PULSE_ANTIBOT_MODULE;
+  if (!path) return null;
+  try {
+    const created: PulseCacheGuard | undefined = require(path).createCacheGuard(cacheGuardOptions());
+    return created ?? denyCacheGuard;
+  } catch (error) {
+    warnCacheGuardOnce("could not be created", error);
+    return denyCacheGuard;
+  }
+}
 /** The independent evaluator behind the index-cache write, created once per
- * process; null when no module is configured, which is the deployment default.
- * A module that cannot be created denies caching rather than letting unchecked
- * pages into the shared index. */
+ * process. A separate flag carries "not loaded yet", so the guard itself is
+ * never typed as possibly undefined. */
 export function pulseCacheGuard(): PulseCacheGuard | null {
-  if (cacheGuard === undefined) {
-    const path = process.env.PULSE_ANTIBOT_MODULE;
-    if (!path) {
-      cacheGuard = null;
-    } else {
-      try {
-        cacheGuard = require(path).createCacheGuard(cacheGuardOptions()) ?? denyCacheGuard;
-      } catch (error) {
-        warnCacheGuardOnce("could not be created", error);
-        cacheGuard = denyCacheGuard;
-      }
-    }
+  if (!cacheGuardLoaded) {
+    cacheGuard = loadCacheGuard();
+    cacheGuardLoaded = true;
   }
   return cacheGuard;
 }

@@ -43,7 +43,10 @@ describe("Pulse Stage 4 cache verdicts and warnings", () => {
     rmSync(directory, { recursive: true, force: true });
   });
 
-  const load = (): Promise<Bridge> => import("../../lib/pulse-routing");
+  // The explicit extension is what node16/nodenext requires of a dynamic
+  // import, and vite-node resolves it back to the .ts source, as this suite's
+  // other fresh-module tests do (for example refreshBudget.test.ts).
+  const load = (): Promise<Bridge> => import("../../lib/pulse-routing.js");
 
   function routingFixture(marked: string): void {
     process.env.PULSE_ADAPTIVE_ROUTING = "true";
