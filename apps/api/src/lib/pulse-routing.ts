@@ -1,4 +1,4 @@
-// PULSE-MOD-BEGIN PULSE-006 2026-10-22 — Pulse: narrow authenticated bridge to independent adaptive routing and to the anti-bot cache decision.
+// PULSE-MOD-BEGIN PULSE-006 2026-10-23 — Pulse: narrow authenticated bridge to independent adaptive routing and to the anti-bot cache decision.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { ScrapeJobTimeoutError } from "./error";
 
@@ -79,6 +79,14 @@ type PulseScrapeSignals = { neverCache: boolean; inspected: boolean; warnings: u
 const scrapeSignals = new AsyncLocalStorage<PulseScrapeSignals>();
 
 export function pulseWithScrapeSignals<T>(run: () => Promise<T>): Promise<T> {
+  // A deployment that configures no Pulse module can raise no signal, and
+  // pulseScrapeSignals() already answers with an empty box outside a frame, so
+  // it pays for no async-context propagation at all. Integration without
+  // adaptive routing still gets a frame: the private worker can return an
+  // inspection, and its warning has to reach the document.
+  if (!pulseRoutingEnabled() && !process.env.PULSE_INTEGRATION_MODULE && !process.env.PULSE_ANTIBOT_MODULE) {
+    return run();
+  }
   return scrapeSignals.run({ neverCache: false, inspected: false, warnings: [] }, run);
 }
 export function pulseScrapeSignals(): PulseScrapeSignals {
@@ -121,10 +129,38 @@ export function pulseAppendWarnings(existing: string | undefined, warnings: unkn
   return warning;
 }
 
+/** Applies what this scrape learned, just before the transformers run: the
+ * never-cache verdict of a native fetch or download, and the known warning
+ * codes of the winning result. Only a private worker engine can carry a
+ * warning, so a document from any other winner is left alone. */
+export function pulseApplyScrapeSignals(
+  options: { storeInCache?: boolean },
+  document: { warning?: string },
+  engine: string,
+): void {
+  const signals = pulseScrapeSignals();
+  if (signals.neverCache) options.storeInCache = false;
+  if (String(engine).startsWith("fire-engine")) {
+    document.warning = pulseAppendWarnings(document.warning, signals.warnings);
+  }
+}
+
 type PulseCacheInput = { url: string; status: number; html: string; contentType?: string };
 type PulseCacheGuard = { shouldCache(input: PulseCacheInput): Promise<boolean>; close(): Promise<void> };
 const denyCacheGuard: PulseCacheGuard = { shouldCache: async () => false, close: async () => {} };
 let cacheGuard: PulseCacheGuard | null | undefined;
+const warned = new Set<string>();
+/** Refusing to cache is the safe answer, but it must never be a silent one: an
+ * operator whose module is misconfigured would otherwise see the index quietly
+ * stop filling. One warning per process per reason, never per page. */
+function warnCacheGuardOnce(reason: string, error: unknown): void {
+  if (warned.has(reason)) return;
+  warned.add(reason);
+  process.emitWarning(
+    `Pulse index-cache guard ${reason}: ${error instanceof Error ? error.message : String(error)}. ` +
+      "Results without trusted worker inspection are not being cached.",
+  );
+}
 
 function cacheGuardOptions(): { workers?: number; budgetMs?: number } {
   const positive = (value: string | undefined) => {
@@ -148,7 +184,8 @@ export function pulseCacheGuard(): PulseCacheGuard | null {
     } else {
       try {
         cacheGuard = require(path).createCacheGuard(cacheGuardOptions()) ?? denyCacheGuard;
-      } catch {
+      } catch (error) {
+        warnCacheGuardOnce("could not be created", error);
         cacheGuard = denyCacheGuard;
       }
     }
@@ -160,6 +197,11 @@ export function pulseCacheGuard(): PulseCacheGuard | null {
 export async function pulseCacheAllowed(input: PulseCacheInput): Promise<boolean> {
   const guard = pulseCacheGuard();
   if (!guard) return true;
-  try { return (await guard.shouldCache(input)) === true; } catch { return false; }
+  try {
+    return (await guard.shouldCache(input)) === true;
+  } catch (error) {
+    warnCacheGuardOnce("failed to evaluate a page", error);
+    return false;
+  }
 }
 // PULSE-MOD-END PULSE-006

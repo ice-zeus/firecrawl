@@ -814,9 +814,9 @@ class WrappedEngineError extends Error {
   }
 }
 
-// PULSE-MOD-BEGIN PULSE-008 2026-10-22 — Pulse: coordinate all target transports through one sequential route owner.
-import { pulseAppendWarnings, pulseFallbackList, pulseRoutingEnabled,
-  pulseScrapeSignals, pulseWithScrapeSignals, withPulseRoutingContext } from "../../lib/pulse-routing";
+// PULSE-MOD-BEGIN PULSE-008 2026-10-23 — Pulse: coordinate all target transports through one sequential route owner.
+import { pulseApplyScrapeSignals, pulseFallbackList, pulseRoutingEnabled,
+  pulseWithScrapeSignals, withPulseRoutingContext } from "../../lib/pulse-routing";
 // PULSE-MOD-END PULSE-008
 
 async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
@@ -1219,23 +1219,8 @@ async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
           : warning;
     }
 
-    // PULSE-MOD-BEGIN PULSE-008 2026-10-22 — Pulse: apply this scrape's anti-bot verdicts before the transformers write the index cache.
-    const pulseSignals = pulseScrapeSignals();
-    // A native fetch or download the worker marked never_cache (an active
-    // challenge, a denial or a rate-limit page) keeps the whole result out of
-    // the index cache, through Firecrawl's own storeInCache opt-out.
-    if (pulseSignals.neverCache) {
-      meta.options.storeInCache = false;
-    }
-    // Only the winning worker result's own warning codes are shown, and only the
-    // codes Firecrawl knows: one fixed sentence each, next to Firecrawl's own
-    // warnings. Free worker text never reaches a customer document.
-    if (String(result.engine).startsWith("fire-engine")) {
-      document.warning = pulseAppendWarnings(
-        document.warning,
-        pulseSignals.warnings,
-      );
-    }
+    // PULSE-MOD-BEGIN PULSE-008 2026-10-23 — Pulse: apply this scrape's anti-bot verdicts (never-cache, the known warning codes) before the transformers write the index cache.
+    pulseApplyScrapeSignals(meta.options, document, result.engine);
     // PULSE-MOD-END PULSE-008
 
     document = await executeTransformers(meta, document);

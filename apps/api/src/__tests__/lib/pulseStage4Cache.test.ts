@@ -1,5 +1,5 @@
-// PULSE-MOD-BEGIN PULSE-006 2026-10-22 — Pulse: the bridge's Stage 4 cache verdicts and the one customer-visible worker warning.
-import { mkdtempSync, writeFileSync } from "node:fs";
+// PULSE-MOD-BEGIN PULSE-006 2026-10-23 — Pulse: the bridge's Stage 4 cache verdicts and the one customer-visible worker warning.
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -38,6 +38,9 @@ describe("Pulse Stage 4 cache verdicts and warnings", () => {
       if (saved[name] === undefined) delete process.env[name];
       else process.env[name] = saved[name];
     }
+  });
+  afterAll(() => {
+    rmSync(directory, { recursive: true, force: true });
   });
 
   const load = (): Promise<Bridge> => import("../../lib/pulse-routing");
@@ -193,6 +196,111 @@ describe("Pulse Stage 4 cache verdicts and warnings", () => {
       const bridge = await load();
       expect(bridge.pulseCacheGuard()).not.toBeNull();
       await expect(bridge.pulseCacheAllowed(page)).resolves.toBe(false);
+    });
+  });
+
+  describe("opening the per-scrape frame", () => {
+    it("does not open one, and costs no async context, while no Pulse module is configured", async () => {
+      const bridge = await load();
+      await bridge.pulseWithScrapeSignals(async () => {
+        bridge.pulseNoteInspection({ schema_version: 1, warnings: [] });
+        expect(bridge.pulseScrapeSignals()).toEqual({ neverCache: false, inspected: false, warnings: [] });
+      });
+    });
+    it.each([
+      ["adaptive routing", "PULSE_ADAPTIVE_ROUTING", "true"],
+      ["worker integration without routing", "PULSE_INTEGRATION_MODULE", "integration"],
+      ["the anti-bot module", "PULSE_ANTIBOT_MODULE", "antibot"],
+    ])("opens one for a deployment that configures %s", async (_name, variable, value) => {
+      process.env[variable] = value;
+      const bridge = await load();
+      await bridge.pulseWithScrapeSignals(async () => {
+        bridge.pulseNoteInspection({ schema_version: 1, warnings: [] });
+        expect(bridge.pulseScrapeSignals().inspected).toBe(true);
+      });
+    });
+  });
+
+  describe("applying the verdicts to the finished document", () => {
+    const lost = [{ code: "ACTION_SUBMISSION_MAY_BE_LOST", actionIndex: 1, checkpointIndex: 0 }];
+
+    it("turns off the index-cache write when a native transport raised never_cache", async () => {
+      routingFixture('"marked"');
+      const bridge = await load();
+      await bridge.pulseWithScrapeSignals(async () => {
+        const options = { storeInCache: true };
+        bridge.pulseNoteNeverCache("marked");
+        bridge.pulseApplyScrapeSignals(options, {}, "pdf");
+        expect(options.storeInCache).toBe(false);
+      });
+    });
+    it("leaves an untouched scrape alone", async () => {
+      process.env.PULSE_ANTIBOT_MODULE = "antibot";
+      const bridge = await load();
+      await bridge.pulseWithScrapeSignals(async () => {
+        const options = { storeInCache: true };
+        const document: { warning?: string } = {};
+        bridge.pulseApplyScrapeSignals(options, document, "fire-engine;chrome-cdp");
+        expect(options.storeInCache).toBe(true);
+        expect(document.warning).toBeUndefined();
+      });
+    });
+    it.each([
+      ["fire-engine;chrome-cdp", true],
+      ["fire-engine(retry);chrome-cdp;stealth", true],
+      ["fire-engine;tlsclient", true],
+      ["playwright", false],
+      ["pdf", false],
+      ["index", false],
+    ])("shows the warning of a %s winner: %s", async (engine, shown) => {
+      process.env.PULSE_ANTIBOT_MODULE = "antibot";
+      const bridge = await load();
+      await bridge.pulseWithScrapeSignals(async () => {
+        const document: { warning?: string } = { warning: "Branding was skipped." };
+        bridge.pulseNoteInspection({ schema_version: 1, warnings: lost });
+        bridge.pulseApplyScrapeSignals({ storeInCache: true }, document, engine);
+        expect(document.warning).toBe(
+          shown ? `Branding was skipped. ${SENTENCE(1)}` : "Branding was skipped.",
+        );
+      });
+    });
+  });
+
+  describe("a misconfigured guard is never silent", () => {
+    const page = { url: "https://example.com/", status: 403, html: "<html></html>", contentType: "text/html" };
+    // Typed loosely on purpose: process.emitWarning is overloaded, so a spy's
+    // precise instance type is not worth pinning in a test.
+    let emitted: any;
+    beforeEach(() => {
+      emitted = vi.spyOn(process, "emitWarning").mockImplementation(() => {});
+    });
+    afterEach(() => {
+      emitted.mockRestore();
+    });
+
+    it("warns once per process when the configured module cannot be created", async () => {
+      fixture("PULSE_ANTIBOT_MODULE", "throw new Error('broken module');");
+      const bridge = await load();
+      await expect(bridge.pulseCacheAllowed(page)).resolves.toBe(false);
+      await expect(bridge.pulseCacheAllowed(page)).resolves.toBe(false);
+      expect(emitted).toHaveBeenCalledTimes(1);
+      expect(String(emitted.mock.calls[0][0])).toContain("could not be created");
+    });
+    it("warns once per process when the evaluator fails, and not per page", async () => {
+      fixture(
+        "PULSE_ANTIBOT_MODULE",
+        "exports.createCacheGuard = () => ({ shouldCache: async () => { throw new Error('budget exceeded'); }, close: async () => {} });",
+      );
+      const bridge = await load();
+      await expect(bridge.pulseCacheAllowed(page)).resolves.toBe(false);
+      await expect(bridge.pulseCacheAllowed(page)).resolves.toBe(false);
+      expect(emitted).toHaveBeenCalledTimes(1);
+      expect(String(emitted.mock.calls[0][0])).toContain("failed to evaluate a page");
+    });
+    it("says nothing while no module is configured", async () => {
+      const bridge = await load();
+      await expect(bridge.pulseCacheAllowed(page)).resolves.toBe(true);
+      expect(emitted).not.toHaveBeenCalled();
     });
   });
 });
