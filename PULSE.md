@@ -1,10 +1,11 @@
-<!-- PULSE-MOD-BEGIN PULSE-017 2026-10-22 — Pulse: single index of every Pulse change in this fork -->
+<!-- PULSE-MOD-BEGIN PULSE-017 2026-10-23 — Pulse: single index of every Pulse change in this fork -->
 # Pulse changes in this fork
 
 `main` is the official [firecrawl/firecrawl](https://github.com/firecrawl/firecrawl) `main` plus a small set of
 Pulse changes. Everything Pulse adds can be found three ways:
 
-1. **Commits:** one commit per change ID on top of upstream: `git log --oneline --grep '^PULSE-'`.
+1. **Commits:** one commit per reviewed change set on top of upstream, its subject naming every change ID it
+   carries, so one commit may cover several IDs: `git log --oneline --grep '^PULSE-'`.
 2. **Markers:** every changed section is wrapped in comments: `grep -rn 'PULSE-MOD-BEGIN' apps/`.
 3. **Register:** the authoritative register (hashes and patches) lives in the private Pulse repository:
    `pulse/upstream-modifications.json` and `pulse/upstream-patches/`.
