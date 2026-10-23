@@ -1,5 +1,5 @@
 // PULSE-MOD-BEGIN PULSE-002 2026-10-22 — Pulse: a worker result whose anti-bot inspection says never_cache must not be index-cached, and its inspection reaches this scrape's cache write and document.
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchFake = vi.hoisted(() => ({
   status: {} as Record<string, unknown>,
@@ -73,6 +73,19 @@ describe("Pulse worker inspection on the way to the cache write and the document
     timeTaken: 1, content: "<html></html>", pageStatusCode: 200,
     responseHeaders: { "content-type": "text/html" },
   };
+
+  // An inspection only travels in a deployment that configures the private
+  // worker integration: that is the deployment whose worker returns one, and
+  // the only one for which pulseWithScrapeSignals opens its frame. Setting it
+  // adds pulseContext to the request body, which the mocked fetch ignores.
+  const previous = process.env.PULSE_INTEGRATION_MODULE;
+  beforeEach(() => {
+    process.env.PULSE_INTEGRATION_MODULE = "integration";
+  });
+  afterEach(() => {
+    if (previous === undefined) delete process.env.PULSE_INTEGRATION_MODULE;
+    else process.env.PULSE_INTEGRATION_MODULE = previous;
+  });
 
   it("hands the finished attempt's inspection on and lets the next attempt replace it", async () => {
     const warnings = [

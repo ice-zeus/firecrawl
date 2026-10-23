@@ -136,6 +136,11 @@ describe("Pulse Stage 4 cache verdicts and warnings", () => {
 
   describe("the worker inspection of the attempt that just finished", () => {
     it("replaces the previous attempt's inspection instead of accumulating", async () => {
+      // Only a configured deployment opens the frame that carries an
+      // inspection; the no-module case is pinned in "opening the per-scrape
+      // frame" below. A private worker is what produces an inspection, so the
+      // worker integration is the variable this test needs.
+      process.env.PULSE_INTEGRATION_MODULE = "integration";
       const bridge = await load();
       const warnings = [{ code: "ACTION_SUBMISSION_MAY_BE_LOST", actionIndex: 3 }];
       await bridge.pulseWithScrapeSignals(async () => {
