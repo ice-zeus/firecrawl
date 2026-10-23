@@ -814,8 +814,9 @@ class WrappedEngineError extends Error {
   }
 }
 
-// PULSE-MOD-BEGIN PULSE-008 2026-09-28 — Pulse: coordinate all target transports through one sequential route owner.
-import { pulseFallbackList, pulseRoutingEnabled, withPulseRoutingContext } from "../../lib/pulse-routing";
+// PULSE-MOD-BEGIN PULSE-008 2026-10-23 — Pulse: coordinate all target transports through one sequential route owner.
+import { pulseApplyScrapeSignals, pulseFallbackList, pulseRoutingEnabled,
+  pulseWithScrapeSignals, withPulseRoutingContext } from "../../lib/pulse-routing";
 // PULSE-MOD-END PULSE-008
 
 async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
@@ -1218,6 +1219,10 @@ async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
           : warning;
     }
 
+    // PULSE-MOD-BEGIN PULSE-008 2026-10-23 — Pulse: apply this scrape's anti-bot verdicts (never-cache, the known warning codes) before the transformers write the index cache.
+    pulseApplyScrapeSignals(meta.options, document, result.engine);
+    // PULSE-MOD-END PULSE-008
+
     document = await executeTransformers(meta, document);
 
     // Set final span attributes
@@ -1239,13 +1244,14 @@ async function scrapeURLLoop(meta: Meta): Promise<ScrapeUrlResponse> {
   });
 }
 
-// PULSE-MOD-BEGIN PULSE-008 2026-09-28 — Pulse: propagate tenant/location into nested native robots and file fetches.
+// PULSE-MOD-BEGIN PULSE-008 2026-10-22 — Pulse: propagate tenant/location into nested native robots and file fetches, and open this scrape's anti-bot signal box.
 export async function scrapeURL(
   id: string, url: string, options: ScrapeOptions, internalOptions: InternalOptions, costTracking: CostTracking,
 ): Promise<ScrapeUrlResponse> {
-  return withPulseRoutingContext({ id, tenantId: internalOptions.teamId, options,
-    zeroDataRetention: internalOptions.zeroDataRetention, deadline: Date.now() + (options.timeout ?? 300000) },
-    () => scrapeURLWithPulseContext(id, url, options, internalOptions, costTracking));
+  return pulseWithScrapeSignals(() =>
+    withPulseRoutingContext({ id, tenantId: internalOptions.teamId, options,
+      zeroDataRetention: internalOptions.zeroDataRetention, deadline: Date.now() + (options.timeout ?? 300000) },
+      () => scrapeURLWithPulseContext(id, url, options, internalOptions, costTracking)));
 }
 
 async function scrapeURLWithPulseContext(

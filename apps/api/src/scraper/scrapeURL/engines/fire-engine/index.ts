@@ -1,7 +1,10 @@
 import { Logger } from "winston";
 import { Meta } from "../..";
-// PULSE-MOD-BEGIN PULSE-002 2026-10-14 — Pulse: nested robots/sitemap requests inherit the authenticated tenant.
-import { pulseRoutingIdentity } from "../../../../lib/pulse-routing";
+// PULSE-MOD-BEGIN PULSE-002 2026-10-22 — Pulse: nested robots/sitemap requests inherit the authenticated tenant.
+import {
+  pulseNoteInspection,
+  pulseRoutingIdentity,
+} from "../../../../lib/pulse-routing";
 // PULSE-MOD-END PULSE-002
 import {
   fireEngineScrape,
@@ -216,8 +219,10 @@ async function performFireEngineScrape<
       status = scrape as FireEngineCheckStatusSuccess;
     }
 
-    // PULSE-MOD-BEGIN PULSE-002 2026-10-14 — Pulse: a worker result whose anti-bot inspection says never_cache (challenge, rate limit) uses the index cache's own storeInCache opt-out.
-    if ((status.meta?.pulseInspection as any)?.never_cache === true) {
+    // PULSE-MOD-BEGIN PULSE-002 2026-10-22 — Pulse: a worker result whose anti-bot inspection says never_cache (challenge, rate limit) uses the index cache's own storeInCache opt-out; the inspection itself is the trusted one this scrape's cache write and document warning read.
+    const pulseInspection = status.meta?.pulseInspection as any;
+    pulseNoteInspection(pulseInspection);
+    if (pulseInspection?.never_cache === true) {
       meta.options.storeInCache = false;
     }
     // PULSE-MOD-END PULSE-002

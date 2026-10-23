@@ -45,6 +45,12 @@ import {
 } from "../../../../controllers/v2/types";
 import { hasFormatOfType } from "../../../../lib/format-utils";
 import { hasCustomRequestContext } from "../../lib/request-context";
+// PULSE-MOD-BEGIN PULSE-019 2026-10-22 — Pulse: check results that carry no trusted worker inspection before they enter the shared index cache.
+import {
+  pulseCacheAllowed,
+  pulseScrapeSignals,
+} from "../../../../lib/pulse-routing";
+// PULSE-MOD-END PULSE-019
 
 export async function sendDocumentToIndex(meta: Meta, document: Document) {
   // Skip caching if screenshot format has custom viewport or quality settings
@@ -91,6 +97,24 @@ export async function sendDocumentToIndex(meta: Meta, document: Document) {
   if (!shouldCache) {
     return document;
   }
+
+  // PULSE-MOD-BEGIN PULSE-019 2026-10-22 — Pulse: a result the private worker did not inspect (a Firecrawl-local engine, or a native fetch with routing off) is evaluated before it is cached; a deny, a timeout or any error keeps it out.
+  const pulseInspected =
+    pulseScrapeSignals().inspected &&
+    String(meta.winnerEngine ?? "").startsWith("fire-engine");
+  if (
+    !pulseInspected &&
+    !(await pulseCacheAllowed({
+      url: document.metadata.url ?? meta.url,
+      status: document.metadata.statusCode ?? 0,
+      html: document.rawHtml ?? "",
+      contentType: document.metadata.contentType ?? undefined,
+    }))
+  ) {
+    meta.logger.info("Pulse kept an unverified result out of the index cache");
+    return document;
+  }
+  // PULSE-MOD-END PULSE-019
 
   // Generate indexId synchronously and set it on document immediately
   // so it's available to other transformers (e.g., search index)

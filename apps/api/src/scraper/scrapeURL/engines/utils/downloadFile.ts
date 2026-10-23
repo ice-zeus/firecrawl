@@ -15,8 +15,11 @@ import { v7 as uuid } from "uuid";
 import * as undici from "undici";
 import { getSecureDispatcher } from "./safeFetch";
 import { logger } from "../../../../lib/logger";
-// PULSE-MOD-BEGIN PULSE-010 2026-09-28 — Pulse: include binary and sitemap downloads in host admission.
-import { pulseTargetFetch } from "../../../../lib/pulse-routing";
+// PULSE-MOD-BEGIN PULSE-010 2026-10-22 — Pulse: include binary and sitemap downloads in host admission.
+import {
+  pulseNoteNeverCache,
+  pulseTargetFetch,
+} from "../../../../lib/pulse-routing";
 // PULSE-MOD-END PULSE-010
 
 /**
@@ -178,12 +181,15 @@ export async function fetchFileToBuffer(
   buffer: Buffer;
 }> {
   try {
-    // PULSE-MOD-BEGIN PULSE-010 2026-09-28 — Pulse: route file buffering through the shared proxy coordinator.
+    // PULSE-MOD-BEGIN PULSE-010 2026-10-22 — Pulse: route file buffering through the shared proxy coordinator and raise its never-cache verdict.
     const response = await pulseTargetFetch(url, {
       ...init,
       redirect: "follow",
       dispatcher: getSecureDispatcher(skipTlsVerification),
     }, undici, skipTlsVerification);
+    // A download reaches no Meta of its own, so a worker verdict of never_cache
+    // is raised on this scrape's signals; scrapeURL turns storeInCache off.
+    pulseNoteNeverCache(response);
     // PULSE-MOD-END PULSE-010
     if (maxSize !== undefined) {
       checkContentLength(response, maxSize);
@@ -233,12 +239,13 @@ export async function downloadFile(
 
   // TODO: maybe we could use tlsclient for this? for proxying
   try {
-    // PULSE-MOD-BEGIN PULSE-010 2026-09-28 — Pulse: route file streaming through the shared proxy coordinator.
+    // PULSE-MOD-BEGIN PULSE-010 2026-10-22 — Pulse: route file streaming through the shared proxy coordinator and raise its never-cache verdict.
     const response = await pulseTargetFetch(url, {
       ...init,
       redirect: "follow",
       dispatcher: getSecureDispatcher(skipTlsVerification),
     }, undici, skipTlsVerification);
+    pulseNoteNeverCache(response);
     // PULSE-MOD-END PULSE-010
 
     if (maxSize !== undefined) {
